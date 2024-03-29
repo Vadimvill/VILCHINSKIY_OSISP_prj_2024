@@ -10,4 +10,6 @@ void Listen(int sockfg,int backlog);
 int Accept(int server,struct sockaddr_in* adr, socklen_t socklen);
 void Connect(int fd,struct sockaddr_in* adr,socklen_t socklen);
 void Inet_pton(int af,const char* src,void *dst);
+void send_file(const char* path,int fd);
+void recv_file(const char* path,int fd);
 #endif //FILESHARE_FWRAPPER_H

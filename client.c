@@ -1,3 +1,4 @@
+
 #include "fwrapper.h"
 #include <unistd.h>
 #include <stdio.h>
@@ -12,8 +13,10 @@ int main() {
     adr.sin_port = htons(10000);
     Inet_pton(AF_INET, "127.0.0.1", &adr.sin_addr);
     Connect(fd, &adr, sizeof(adr));
+    send_file("original1",fd);
+    send_file("original2",fd);
+    send_file("original3",fd);
     send_file("server.c",fd);
-    send_file("client.c",fd);
-    sleep(1);
+    sleep(2);
     close(fd);
 }
