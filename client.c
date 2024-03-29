@@ -12,13 +12,8 @@ int main() {
     adr.sin_port = htons(10000);
     Inet_pton(AF_INET, "127.0.0.1", &adr.sin_addr);
     Connect(fd, &adr, sizeof(adr));
-    FILE * file = fopen("client.c","rb");
-    char buffer[1024];
-    size_t n = 0;
-    while ((n = fread(buffer,1,1024,file)) > 0){
-        send(fd,buffer,n,0);
-    }
-    fclose(file);
+    send_file("server.c",fd);
+    send_file("client.c",fd);
     sleep(1);
     close(fd);
 }
