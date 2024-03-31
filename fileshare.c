@@ -6,6 +6,96 @@
 #include <malloc.h>
 #include <dirent.h>
 #include "fileshare.h"
+
+unsigned char compareCommands(const char com1[8],const char com2[8]){
+    for(int i = 0;i<8;i++){
+        if(com1[i]!=com2[i]) return 0;
+    }
+    return 1;
+}
+
+unsigned char check_files(const char message[2048], const char* path) {
+    DIR *dir = opendir(path);
+    if (dir == NULL) {
+        perror("opendir");
+        return 0;
+    }
+    closedir(dir);
+
+    struct dirent **namelist;
+    int n = scandir(path, &namelist, NULL, alphasort);
+
+    if (n < 0) {
+        perror("scandir");
+        return 0;
+    }
+
+    int start_index = 0;
+    int files_found = 0;
+    int files_in_message = 0;
+
+    int message_length = strlen(message);
+
+    for (int i = 0; i <= message_length; i++) {
+        if (message[i] == ' ' || message[i] == '\n' || message[i] == '\0') {
+            int file_found = 0;
+
+            for (int j = 0; j < n; j++) {
+                if (strcmp(namelist[j]->d_name, ".") == 0 || strcmp(namelist[j]->d_name, "..") == 0) {
+                    continue;  // игнорировать записи "." и ".."
+                }
+
+                int len = i - start_index;
+                if (strncmp(message + start_index, namelist[j]->d_name, len) == 0 && len == strlen(namelist[j]->d_name)) {
+                    file_found = 1;
+                    break;
+                }
+            }
+
+            if (file_found) {
+                files_found++;
+            } else {
+                for (int j = 0; j < n; j++) {
+                    free(namelist[j]);
+                }
+                free(namelist);
+
+                return 0;
+            }
+
+            files_in_message++;
+            start_index = i + 1;
+        }
+    }
+
+    for (int j = 0; j < n; j++) {
+        free(namelist[j]);
+    }
+    free(namelist);
+
+    if (files_found < files_in_message) {
+        return 0;  // Если количество найденных файлов меньше количества файлов в сообщении, возвращаем 0
+    }
+
+    return 1;
+}
+int count_words(const char message[2048]) {
+    int wordCount = 0;
+    int inWord = 0;
+
+    for (int i = 0; i < 2048; i++) {
+        if (message[i] == ' ' || message[i] == '\n' || message[i] == '\0') {
+            if (inWord) {
+                inWord = 0;
+                wordCount++;
+            }
+        } else {
+            inWord = 1;
+        }
+    }
+
+    return wordCount;
+}
 char* concatenateStrings(const char *str1, const char *str2) {
     char *result = malloc(strlen(str1) + strlen(str2) + 1);
     if (result == NULL) {
@@ -13,6 +103,32 @@ char* concatenateStrings(const char *str1, const char *str2) {
     }
     sprintf(result, "%s%s", str1, str2);
     return result;
+}
+char** split_words(const char message[2048], int* wordCount) {
+    char** words = NULL;
+    *wordCount = 0;
+
+    // Копируем сообщение во временный буфер для обработки
+    char buffer[2048];
+    strcpy(buffer, message);
+
+    // Используем strtok для разделения строки на слова
+    char* token = strtok(buffer, " \n");
+    while (token != NULL) {
+        (*wordCount)++;
+
+        // Увеличиваем размер массива слов
+        words = realloc(words, sizeof(char*) * (*wordCount));
+
+        // Выделяем память для хранения копии слова и копируем его
+        words[*wordCount - 1] = malloc(strlen(token) + 1);
+        strcpy(words[*wordCount - 1], token);
+
+        // Получаем следующее слово
+        token = strtok(NULL, " \n");
+    }
+
+    return words;
 }
 void send_file(const char *path, int fd) {
     FILE *file = fopen(path, "rb");

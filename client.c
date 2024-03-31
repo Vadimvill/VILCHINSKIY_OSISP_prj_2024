@@ -2,13 +2,9 @@
 #include "fwrapper.h"
 #include <unistd.h>
 #include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
 #include <dirent.h>
 #include "fileshare.h"
-extern int scandir(const char *dirp, struct dirent ***namelist,
-                   int (*filter)(const struct dirent*),
-                   int (*compar)(const struct dirent**, const struct dirent**));
+#include "globalconstants.h"
 int main() {
     printf("Установите базовый каталог для отправки файлов\n");
     char bathPath[128];
@@ -19,8 +15,24 @@ int main() {
     adr.sin_port = htons(10000);
     Inet_pton(AF_INET, "127.0.0.1", &adr.sin_addr);
     Connect(fd, &adr, sizeof(adr));
+    char buff[8];
+    char msg[2048];
     while (1){
-        send_list_of_files(fd,bathPath);
+        read(fd,buff,COMMAND_SIZE);
+        write(fd,buff,COMMAND_SIZE);
+        if(compareCommands(buff,GET_FILES_NAME)) send_list_of_files(fd,bathPath);
+        if(compareCommands(buff,DOWNLOAD_FILES)){
+            read(fd,msg,MSG_SIZE);
+            if(check_files(msg,bathPath)){
+                write(fd,POSTIVE_ANSWER,8);
+                int n = count_words(msg);
+                char ** names = split_words(msg,&n);
+                for(int i = 0;i<n;i++){
+                    send_file(concatenateStrings(bathPath,names[i]),fd);
+                }
+            } else write(fd,"00000000",8);
+
+        }
     }
     sleep(2);
     close(fd);
