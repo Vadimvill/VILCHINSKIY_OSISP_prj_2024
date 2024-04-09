@@ -15,7 +15,7 @@ int main() {
     char basePath[128];
     scanf("%s", basePath);
     int server = Socket(AF_INET, SOCK_STREAM, 0);
-    int flags = fcntl(server, F_GETFL, 0);
+    fcntl(server, F_GETFL, 0);
     struct sockaddr_in adr = {0};
     adr.sin_family = AF_INET;
     adr.sin_port = htons(10000);
