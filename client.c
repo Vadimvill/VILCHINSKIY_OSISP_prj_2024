@@ -2,7 +2,6 @@
 #include "fwrapper.h"
 #include <unistd.h>
 #include <stdio.h>
-#include <dirent.h>
 #include "fileshare.h"
 #include "globalconstants.h"
 int main() {

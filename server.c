@@ -37,6 +37,7 @@ int main() {
         if(i== 2){
             printf("Введите имена файлов через пробел\n");
             char file_names[MSG_SIZE];
+            printf("ewq");
             scanf(" %[^\n]", file_names);
             write(fd,DOWNLOAD_FILES,COMMAND_SIZE);
             read(fd,buff,COMMAND_SIZE);

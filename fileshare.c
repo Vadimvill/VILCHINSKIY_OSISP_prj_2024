@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <string.h>
-#include <malloc.h>
 #include <dirent.h>
 #include <stdlib.h>
 #include <sys/stat.h>
