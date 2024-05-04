@@ -25,4 +25,5 @@ char* getFileName(const char* path);
 long long getFileSize(const char *path);
 char* getFileSizeString(long long fileSize);
 long long getFileSizeFromString(const char* fileSizeString);
+unsigned char directoryExists(const char *path);
 #endif //FILESHARE_FILESHARE_H

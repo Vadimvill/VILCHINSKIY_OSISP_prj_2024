@@ -24,6 +24,7 @@ void* thread_function_client(void* arg) {
 }
 int main() {
     // printf("Установите базовый каталог для отправки файлов\n");
+    printf("Введите ip");
     char bathPath[128] = "./\0";
     char ip[16];
     scanf("%s",ip);

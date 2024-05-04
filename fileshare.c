@@ -15,6 +15,15 @@ unsigned char compareCommands(const char com1[8],const char com2[8]){
     }
     return 1;
 }
+unsigned char directoryExists(const char *path) {
+    DIR *dir = opendir(path);
+    if (dir != NULL) {
+        closedir(dir);
+        return 1; // Директория существует
+    }
+    return 0; /// Ошибка при вызове stat(), директория не существует
+}
+
 
 unsigned char check_files(const char message[2048], const char* path) {
     DIR *dir = opendir(path);
@@ -43,7 +52,7 @@ unsigned char check_files(const char message[2048], const char* path) {
             int file_found = 0;
 
             for (int j = 0; j < n; j++) {
-                if (strcmp(namelist[j]->d_name, ".") == 0 || strcmp(namelist[j]->d_name, "..") == 0) {
+                if (strcmp(namelist[j]->d_name, ".") == 0 || strcmp(namelist[j]->d_name, "..") == 0 || strcmp(namelist[j]->d_name, "server") == 0) {
                     continue;  // игнорировать записи "." и ".."
                 }
 
@@ -156,13 +165,15 @@ void send_file(const char *path, int fd) {
 
 void recv_list_of_files(int fd){
     write(fd,"3",1);
-    char size;
+    char str[8];
     char buff[1024];
-    read(fd,&size,1);
-    for(int i = 0;i<(int)size-2;i++){
+    while (1){
         recv(fd,buff,1024,0);
-        printf("%s\n",buff);
-        write(fd,"3",1);
+        if(strcmp(buff," ") != 0) printf("%s\n",buff);
+        write(fd,"1",1);
+        read(fd,str,8);
+        if(compareCommands(str,POSTIVE_ANSWER)) continue;
+        else break;
     }
 }
 void send_list_of_files(int fd,char* path){
@@ -170,11 +181,15 @@ void send_list_of_files(int fd,char* path){
     struct dirent ** namelist;
     read(fd,buff,1024);
     char n = scandir(path,&namelist,NULL,NULL);
-    write(fd, &n, 1);
-    for(int i = 2;i<n;i++){
+    for(int i = 0;i<n;i++){
         sleep(0);
-        send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
+        if(strcmp(namelist[i]->d_name,".") !=0 && strcmp(namelist[i]->d_name,"..") != 0 && namelist[i]->d_type == DT_REG)
+            send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
+        else
+            send(fd," ",sizeof (namelist[i]->d_name),0);
         while (read(fd,buff,1) < 0);
+        if(i<n-1)write(fd,POSTIVE_ANSWER,8);
+        else write(fd,"00000000",8);
     }
 }
 void recv_file(const char *path, int fd) {
