@@ -43,22 +43,23 @@ int Accept(int server, struct sockaddr_in *adr, socklen_t socklen) {
     return res;
 }
 
-void Connect(int fd, struct sockaddr_in *adr, socklen_t socklen) {
+int Connect(int fd, struct sockaddr_in *adr, socklen_t socklen) {
     int res = connect(fd, (struct sockaddr *) adr, socklen);
     if (res == -1) {
         perror("Error to connect\n");
-        exit(EXIT_FAILURE);
+        return -1;
     }
+    return 1;
 }
 
-void Inet_pton(int af, const char *src, void *dst) {
+int Inet_pton(int af, const char *src, void *dst) {
     int res = inet_pton(af, src, dst);
     if (res == 0) {
-        printf("fail on inet_pton\n");
+        return -1;
     }
     if (res == -1) {
-        printf("is valid ip\n");
+        return 1;
     } else {
-        perror("inet_pton");
+        return -1;
     }
 }

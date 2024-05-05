@@ -9,21 +9,14 @@
 #include <libgen.h>
 #include "fileshare.h"
 
-unsigned char compareCommands(const char com1[8],const char com2[8]){
+
+
+unsigned char compare_commands(const char com1[8],const char com2[8]){
     for(int i = 0;i<8;i++){
         if(com1[i]!=com2[i]) return 0;
     }
     return 1;
 }
-unsigned char directoryExists(const char *path) {
-    DIR *dir = opendir(path);
-    if (dir != NULL) {
-        closedir(dir);
-        return 1; // Директория существует
-    }
-    return 0; /// Ошибка при вызове stat(), директория не существует
-}
-
 
 unsigned char check_files(const char message[2048], const char* path) {
     DIR *dir = opendir(path);
@@ -35,60 +28,34 @@ unsigned char check_files(const char message[2048], const char* path) {
 
     struct dirent **namelist;
     int n = scandir(path, &namelist, NULL, NULL);
+    if(n == 0) return 0;
 
-    if (n < 0) {
-        perror("scandir");
-        return 0;
-    }
-
-    int start_index = 0;
-    int files_found = 0;
-    int files_in_message = 0;
-
-    int message_length = strlen(message);
-
-    for (int i = 0; i <= message_length; i++) {
-        if (message[i] == ' ' || message[i] == '\n' || message[i] == '\0') {
-            int file_found = 0;
-
-            for (int j = 0; j < n; j++) {
-                if (strcmp(namelist[j]->d_name, ".") == 0 || strcmp(namelist[j]->d_name, "..") == 0 || strcmp(namelist[j]->d_name, "server") == 0) {
-                    continue;  // игнорировать записи "." и ".."
-                }
-
-                int len = i - start_index;
-                if (strncmp(message + start_index, namelist[j]->d_name, len) == 0 && len == (int)strlen(namelist[j]->d_name)) {
-                    file_found = 1;
-                    break;
-                }
+    int* count_files_in_msg = malloc(sizeof (int));
+    char** names = split_words(message,count_files_in_msg);
+    int match = 0;
+    for(int i = 0;i<(*count_files_in_msg);i++){
+        for(int j = 0;j<n;j++){
+            if(strcmp(namelist[j]->d_name,names[i]) == 0){
+                match++;
+                break;
             }
-
-            if (file_found) {
-                files_found++;
-            } else {
-                for (int j = 0; j < n; j++) {
-                    free(namelist[j]);
-                }
-                free(namelist);
-
-                return 0;
-            }
-
-            files_in_message++;
-            start_index = i + 1;
         }
     }
-
-    for (int j = 0; j < n; j++) {
-        free(namelist[j]);
+    for(int i = 0;i<n;i++){
+        free(namelist[i]);
     }
-    free(namelist);
-
-    if (files_found < files_in_message) {
-        return 0;  // Если количество найденных файлов меньше количества файлов в сообщении, возвращаем 0
+    for(int i = 0;i<(*count_files_in_msg);i++){
+        free(names[i]);
     }
+    free(names);
+    if(match == (*count_files_in_msg)){
 
-    return 1;
+        free(namelist);
+        free(count_files_in_msg);
+        return 1;
+    }
+    free(count_files_in_msg);
+    return 0;
 }
 int count_words(const char message[2048]) {
     int wordCount = 0;
@@ -165,15 +132,13 @@ void send_file(const char *path, int fd) {
 
 void recv_list_of_files(int fd){
     write(fd,"3",1);
-    char str[8];
+    char size;
     char buff[1024];
-    while (1){
+    read(fd,&size,1);
+    for(int i = 0;i<(int)size-2;i++){
         recv(fd,buff,1024,0);
-        if(strcmp(buff," ") != 0) printf("%s\n",buff);
-        write(fd,"1",1);
-        read(fd,str,8);
-        if(compareCommands(str,POSTIVE_ANSWER)) continue;
-        else break;
+        printf("%s\n",buff);
+        write(fd,"3",1);
     }
 }
 void send_list_of_files(int fd,char* path){
@@ -181,15 +146,11 @@ void send_list_of_files(int fd,char* path){
     struct dirent ** namelist;
     read(fd,buff,1024);
     char n = scandir(path,&namelist,NULL,NULL);
-    for(int i = 0;i<n;i++){
+    write(fd, &n, 1);
+    for(int i = 2;i<n;i++){
         sleep(0);
-        if(strcmp(namelist[i]->d_name,".") !=0 && strcmp(namelist[i]->d_name,"..") != 0 && namelist[i]->d_type == DT_REG)
-            send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
-        else
-            send(fd," ",sizeof (namelist[i]->d_name),0);
+        send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
         while (read(fd,buff,1) < 0);
-        if(i<n-1)write(fd,POSTIVE_ANSWER,8);
-        else write(fd,"00000000",8);
     }
 }
 void recv_file(const char *path, int fd) {
