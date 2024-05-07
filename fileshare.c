@@ -116,7 +116,7 @@ void send_file(const char *path, int fd) {
     free(string);
     char buffer[1024];
     int total = 0;
-    size_t n = 0;
+    size_t n;
     while (1) {
         sleep(0);
         n = fread(buffer, 1, 1024, file);
@@ -132,26 +132,42 @@ void send_file(const char *path, int fd) {
 
 void recv_list_of_files(int fd){
     write(fd,"3",1);
-    char size;
+    char command_buff[8];
     char buff[1024];
-    read(fd,&size,1);
-    for(int i = 0;i<(int)size-2;i++){
-        recv(fd,buff,1024,0);
-        printf("%s\n",buff);
-        write(fd,"3",1);
+    read(fd,command_buff,COMMAND_SIZE);
+    if(compare_commands(command_buff,NEGATIVE_ANSWER)){
+        return;
+    }
+    while (1){
+        read(fd,command_buff,8);
+        if(compare_commands(command_buff,POSTIVE_ANSWER)){
+            recv(fd,buff,1024,0);
+            printf("%s\n",buff);
+        } else break;
     }
 }
-void send_list_of_files(int fd,char* path){
+void send_list_of_files(int fd){
     char buff[1024];
     struct dirent ** namelist;
     read(fd,buff,1024);
-    char n = scandir(path,&namelist,NULL,NULL);
-    write(fd, &n, 1);
-    for(int i = 2;i<n;i++){
-        sleep(0);
-        send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
-        while (read(fd,buff,1) < 0);
+    int n = scandir("./",&namelist,NULL,NULL);
+    int count_files = 0;
+    for(int i = 0;i<n;i++){
+        if(namelist[i]->d_type == DT_REG) count_files++;
     }
+    if(count_files == 0){
+        write(fd,NEGATIVE_ANSWER,COMMAND_SIZE);
+        return;
+    }
+    write(fd,POSTIVE_ANSWER,COMMAND_SIZE);
+    for(int i = 0;i<n;i++){
+        sleep(0);
+        if(namelist[i]->d_type == DT_REG){
+            write(fd,POSTIVE_ANSWER,8);
+            send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
+        }
+    }
+    write(fd,NEGATIVE_ANSWER,8);
 }
 void recv_file(const char *path, int fd) {
     FILE *file = fopen(path, "wb");
