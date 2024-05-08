@@ -186,6 +186,7 @@ void send_file(const char *path, int fd) {
     FILE *file = fopen(path, "rb");
     long long byte_size = getFileSize(path);
     char* string = getFileSizeString(byte_size);
+    printf("Size string %s in send %s\n",path,string);
     write(fd,string,sizeof (string));
     free(string);
     if(byte_size == 0){
@@ -211,6 +212,7 @@ void recv_file(const char *path, int fd) {
     FILE *file = fopen(path, "wb");
     char * string = malloc(20);
     read(fd,string,sizeof (string));
+    printf("Size string %s in recv %s\n",path,string);
     long long byte_size = getFileSizeFromString(string);
     free(string);
     if(byte_size == 0){

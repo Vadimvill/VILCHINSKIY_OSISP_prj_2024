@@ -14,7 +14,25 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <signal.h>
+struct ThreadArgs {
+    int fd;
+    char *name;
+};
+void *thread_function_send(void *arg) {
+    struct ThreadArgs *args = (struct ThreadArgs *) arg;
+    int file_descriptor = args->fd;
+    char *file_name = args->name;
+    send_file(file_name, file_descriptor);
+    pthread_exit(NULL);
+}
 
+void *thread_function_recv(void *arg) {
+    struct ThreadArgs *args = (struct ThreadArgs *) arg;
+    int file_descriptor = args->fd;
+    char *file_name = args->name;
+    recv_file(file_name, file_descriptor);
+    pthread_exit(NULL);
+}
 void print_local_ip(int port) {
     struct ifaddrs *addrs, *tmp;
     getifaddrs(&addrs);
@@ -42,11 +60,6 @@ void clear_input_buffer() {
     while ((c = getchar()) != '\n' && c != EOF) {}
 }
 
-struct ThreadArgs {
-    int fd;
-    char *basePath;
-    char *name;
-};
 
 void menu_close_server(int *fd, int server) {
     sleep(1);
@@ -64,9 +77,10 @@ void menu_close_client(int *fd) {
     }
     free(fd);
     exit(1);
+    send_mutex_state_to_server
 }
 
-void menu_recv_files(int fd) {
+void menu_recv_files(int *fd) {
     char command_buff[COMMAND_SIZE];
     char msg_buff[MSG_SIZE];
 
@@ -81,52 +95,66 @@ void menu_recv_files(int fd) {
     int *n = malloc(sizeof(int));
     char **names = split_words(msg_buff, n);
 
-    write(fd, msg_buff, MSG_SIZE);
+    write(fd[0], msg_buff, MSG_SIZE);
 
-    read(fd, command_buff, COMMAND_SIZE);
+    read(fd[0], command_buff, COMMAND_SIZE);
 
     if (compareCommands(command_buff, POSTIVE_ANSWER)) {
+        int count_use_threads = 0;
+        pthread_t *array = malloc(sizeof(pthread_t)*4);
         for (int i = 0; i < (*n); i++) {
-            recv_file(names[i], fd);
+            if(count_use_threads == 4){
+                for(int k = 0;k<4;k++){
+                    pthread_join(array[k],NULL);
+                }
+                count_use_threads = 0;
+            }
+            struct ThreadArgs threadArgs;
+            threadArgs.name = names[i];
+            threadArgs.fd = fd[count_use_threads+1];
+            int result = pthread_create(&array[count_use_threads],NULL, thread_function_recv,&threadArgs);
+            count_use_threads++;
+            sleep(0);
+            printf("Count use threads in client %d \n",count_use_threads);
+        }
+        for(int z = 0;z<count_use_threads;z++){
+            pthread_join(array[z],NULL);
         }
     }
 }
 
-void menu_send_file(int fd, char *base_path) {
+void menu_send_file(int *fd, char *base_path) {
     char msg_buff[MSG_SIZE];
     char command_buff[8];
 
-    read(fd, msg_buff, MSG_SIZE);
+    read(fd[0], msg_buff, MSG_SIZE);
     int *n = malloc(sizeof(int));
     char **names = split_words(msg_buff, n);
 
 
     if (check_files(msg_buff, "./")) {
-        write(fd, POSTIVE_ANSWER, COMMAND_SIZE);
+        write(fd[0], POSTIVE_ANSWER, COMMAND_SIZE);
+        int count_use_threads = 0;
+        pthread_t *array = malloc(sizeof(pthread_t)*4);
         for (int i = 0; i < (*n); i++) {
-            send_file(names[i],fd);
+            if(count_use_threads == 4){
+                for(int c = 0;c<4;c++){
+                    pthread_join(array[c],NULL);
+                }
+                count_use_threads = 0;
+            }
+            struct ThreadArgs threadArgs;
+            threadArgs.name = names[i];
+            threadArgs.fd = fd[count_use_threads+1];
+            int result = pthread_create(&array[count_use_threads],NULL, thread_function_send,&threadArgs);
+            count_use_threads++;
+            sleep(0);
+            printf("Count use threads in server %d \n",count_use_threads);
         }
-    } else write(fd, NEGATIVE_ANSWER, COMMAND_SIZE);
-}
-
-void *thread_function_server(void *arg) {
-    struct ThreadArgs *args = (struct ThreadArgs *) arg;
-    int file_descriptor = args->fd;
-    char *base_path = args->basePath;
-    char *file_name = args->name;
-    //recv_file(concatenateStrings(base_path, file_name), file_descriptor);
-    pthread_exit(NULL);
-}
-
-void *thread_function_client(void *arg) {
-    struct ThreadArgs *args = (struct ThreadArgs *) arg;
-
-    // Использование переданных аргументов
-    int file_descriptor = args->fd;
-    char *base_path = args->basePath;
-    char *file_name = args->name;
-    send_file(concatenateStrings(base_path, file_name), file_descriptor);
-    pthread_exit(NULL);
+        for(int c = 0;c<count_use_threads;c++){
+            pthread_join(array[c],NULL);
+        }
+    } else write(fd[0], NEGATIVE_ANSWER, COMMAND_SIZE);
 }
 
 int client(char* base_path_server) {
@@ -165,7 +193,7 @@ int client(char* base_path_server) {
         scanf(" %c", choise);
         write(fd[0], choise, 1);
         if ((*choise) == '1'){
-            menu_recv_files(fd[0]);
+            menu_recv_files(fd);
         }
         if((*choise) == '2'){
             recv_list_of_files(fd[0]);
@@ -224,7 +252,7 @@ int server() {
     while (1) {
         char *choise = malloc(1);
         read(fd[0], choise, 1);
-        if ((*choise) == '1') menu_send_file(fd[0],base_path);
+        if ((*choise) == '1') menu_send_file(fd,base_path);
         if((*choise) == '2') send_list_of_files(fd[0],"./");
         if ((*choise) == '3') menu_close_server(fd, server_socket);
     }
