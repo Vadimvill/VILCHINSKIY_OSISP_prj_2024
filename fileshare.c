@@ -9,8 +9,40 @@
 #include <sys/stat.h>
 #include <libgen.h>
 #include "fileshare.h"
+char** remove_duplicates(char** strings, int count, int* new_count) {
+    char** unique_strings = malloc(count * sizeof(char*));
+    int unique_count = 0;
 
+    for (int i = 0; i < count; i++) {
+        int is_duplicate = 0;
 
+        for (int j = 0; j < unique_count; j++) {
+            if (strcmp(strings[i], unique_strings[j]) == 0) {
+                is_duplicate = 1;
+                break;
+            }
+        }
+
+        if (!is_duplicate) {
+            unique_strings[unique_count++] = strdup(strings[i]);
+        }
+    }
+
+    *new_count = unique_count;
+
+    return unique_strings;
+}
+int check_duplicates(char** strings, int count) {
+    for (int i = 0; i < count; i++) {
+        for (int j = i + 1; j < count; j++) {
+            if (strcmp(strings[i], strings[j]) == 0) {
+                return 0;  // Найдено совпадение, возвращаем 0
+            }
+        }
+    }
+
+    return 1;  // Совпадений не найдено
+}
 
 unsigned char compareCommands(const char com1[8],const char com2[8]){
     for(int i = 0;i<8;i++){
@@ -131,9 +163,10 @@ void recv_list_of_files(int fd){
     int n = atoi(size);
     for(int i = 0;i<n;i++){
         recv(fd,buff,1024,0);
-        printf("%s\n",buff);
+        printf("%s ",buff);
         write(fd,"3",1);
     }
+    printf("\n");
 }
 void send_list_of_files(int fd,char* path){
     char buff[1024];
@@ -170,7 +203,7 @@ void send_file(const char *path, int fd) {
         total += send(fd,buffer,n,0);
         if(total >= byte_size) break;
     }
-    printf("%d\n",total);
+    printf("Total send of %s %d\n",path,total);
     fclose(file);
     while (read(fd,buffer,1) < 0);
 }
@@ -193,7 +226,7 @@ void recv_file(const char *path, int fd) {
         total += fwrite(buffer,1,n,file);
         if(total >= byte_size) break;
     }
-    printf("%d\n",total);
+    printf("Total recv of %s %d\n",path,total);
     fclose(file);
     write(fd,"1",1);
 }

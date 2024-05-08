@@ -13,7 +13,9 @@ extern int scandir (const char *__restrict __dir,
                                   const struct dirent **))
 __nonnull ((1, 2));
 void send_file(const char* path,int fd);
-void recv_file(const char* path,int fd);
+int check_duplicates(char** strings, int count);
+char** remove_duplicates(char** strings, int count, int* new_count);
+        void recv_file(const char* path,int fd);
 char* concatenateStrings(const char *str1, const char *str2);
 void send_list_of_files(int fd,char* path);
 void recv_list_of_files(int fd);

@@ -94,15 +94,12 @@ void menu_recv_files(int fd) {
 
 void menu_send_file(int fd, char *base_path) {
     char msg_buff[MSG_SIZE];
-// отправка файлов
+    char command_buff[8];
+
     read(fd, msg_buff, MSG_SIZE);
     int *n = malloc(sizeof(int));
     char **names = split_words(msg_buff, n);
 
-
-    for (int i = 0; i < (*n); i++) {
-        printf("%s\n", names[i]);
-    }
 
     if (check_files(msg_buff, "./")) {
         write(fd, POSTIVE_ANSWER, COMMAND_SIZE);
@@ -132,14 +129,21 @@ void *thread_function_client(void *arg) {
     pthread_exit(NULL);
 }
 
-int client() {
+int client(char* base_path_server) {
     printf("Установите базовый каталог для сохранения файлов\n");
     char base_path[128];
-    scanf("%s", base_path);
-    if (chdir(base_path) == 0) {
-        printf("Рабочая директория изменена на: %s\n", base_path);
-    } else {
-        printf("Не удалось изменить рабочую директорию.\n");
+    while (1){
+        scanf("%s", base_path);
+        if(strncmp(base_path,base_path_server,128) == 0){
+            printf("Не удалось изменить рабочую директорию т.к у сервера такая же.\n");
+            continue;
+        }
+        if (chdir(base_path) == 0) {
+            printf("Рабочая директория изменена на: %s\n", base_path);
+            break;
+        } else {
+            printf("Не удалось изменить рабочую директорию.\n");
+        }
     }
     printf("Введите IP: ");
     char ip[16];
@@ -157,14 +161,19 @@ int client() {
 
     while (1) {
         char *choise = malloc(1);
-        printf("1.Скачать файлы\n2.Список файлов\n3.Закрыть соединение");
-        scanf("%c", choise);
+        printf("1.Скачать файлы\n2.Список файлов\n3.Закрыть соединение\n");
+        scanf(" %c", choise);
         write(fd[0], choise, 1);
-        if ((*choise) == '1') menu_recv_files(fd[0]);
-        if((*choise) == '2') recv_list_of_files(fd[0]);
-        if ((*choise) == '3') menu_close_client(fd);
+        if ((*choise) == '1'){
+            menu_recv_files(fd[0]);
+        }
+        if((*choise) == '2'){
+            recv_list_of_files(fd[0]);
+        }
+        if ((*choise) == '3'){
+            menu_close_client(fd);
+        }
     }
-
 
     return 1;
 }
@@ -172,7 +181,26 @@ int client() {
 int server() {
     printf("Установите базовый каталог для отправки файлов\n");
     char base_path[128] = "recv/\0";
-    scanf("%s", base_path);
+    char cwd[256];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+        // Записываем текущую директорию в целевую строку
+        char target[256];
+        strcpy(target, cwd);
+        printf("Текущая директория: %s\n", target);
+    } else {
+        perror("getcwd() error");
+        return 1;
+    }
+    while (1){
+        scanf("%s", base_path);
+        if (chdir(base_path) == 0) {
+            printf("Рабочая директория изменена на: %s\n", base_path);
+            break;
+        } else {
+            printf("Не удалось изменить рабочую директорию.\n");
+        }
+    }
+    chdir(cwd);
     int server_socket = Socket(AF_INET, SOCK_STREAM, 0);
 
     fcntl(server_socket, F_GETFL, 0);
@@ -185,14 +213,10 @@ int server() {
     print_local_ip(10000);
     int pid = fork();
     if (pid == 0) {
-        client();
+        client(base_path);
         exit(0);  // Завершение дочернего процесса
     }
-    if (chdir(base_path) == 0) {
-        printf("Рабочая директория изменена на: %s\n", base_path);
-    } else {
-        printf("Не удалось изменить рабочую директорию.\n");
-    }
+    chdir(base_path);
     int *fd = malloc(sizeof(int) * 5);
     for (int i = 0; i < 5; i++) {
         fd[i] = Accept(server_socket, &adr, addrlen);
