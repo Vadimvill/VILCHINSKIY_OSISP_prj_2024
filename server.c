@@ -161,6 +161,7 @@ int client() {
         scanf("%c", choise);
         write(fd[0], choise, 1);
         if ((*choise) == '1') menu_recv_files(fd[0]);
+        if((*choise) == '2') recv_list_of_files(fd[0]);
         if ((*choise) == '3') menu_close_client(fd);
     }
 
@@ -200,6 +201,7 @@ int server() {
         char *choise = malloc(1);
         read(fd[0], choise, 1);
         if ((*choise) == '1') menu_send_file(fd[0],base_path);
+        if((*choise) == '2') send_list_of_files(fd[0],"./");
         if ((*choise) == '3') menu_close_server(fd, server_socket);
     }
 

@@ -103,12 +103,62 @@ char** split_words(const char message[2048], int* wordCount) {
 
     return words;
 }
+struct dirent** scandir_reg(int*n){
+    struct dirent ** namelist;
+    int count = scandir("./",&namelist,NULL,NULL);
+    int count_reg_files = 0;
+    for(int i = 0;i<count;i++){
+        if(namelist[i]->d_type == DT_REG){
+            count_reg_files++;
+        }
+    }
+    struct dirent** result = malloc(sizeof (struct dirent*)*count_reg_files);
+    (*n) = 0;
+    for(int i = 0;i<count;i++){
+        if(namelist[i]->d_type == DT_REG){
+             result[(*n)] = namelist[i];
+             (*n)++;
+        }
+    }
+    return result;
+}
+
+void recv_list_of_files(int fd){
+    write(fd,"3",1);
+    char size[8];
+    char buff[1024];
+    read(fd,&size,8);
+    int n = atoi(size);
+    for(int i = 0;i<n;i++){
+        recv(fd,buff,1024,0);
+        printf("%s\n",buff);
+        write(fd,"3",1);
+    }
+}
+void send_list_of_files(int fd,char* path){
+    char buff[1024];
+    int* n = malloc(sizeof (int));
+    struct dirent ** namelist = scandir_reg(n);
+    read(fd,buff,1024);
+    char buffer[8];
+    snprintf(buffer, sizeof(buffer), "%d", (*n));
+    write(fd, &buffer, 8);
+    for(int i = 0;i<(*n);i++){
+        sleep(0);
+        send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
+        while (read(fd,buff,1) < 0);
+    }
+}
 void send_file(const char *path, int fd) {
     FILE *file = fopen(path, "rb");
     long long byte_size = getFileSize(path);
     char* string = getFileSizeString(byte_size);
     write(fd,string,sizeof (string));
     free(string);
+    if(byte_size == 0){
+        fclose(file);
+        return;
+    }
     char buffer[1024];
     int total = 0;
     size_t n = 0;
@@ -124,36 +174,16 @@ void send_file(const char *path, int fd) {
     fclose(file);
     while (read(fd,buffer,1) < 0);
 }
-
-void recv_list_of_files(int fd){
-    write(fd,"3",1);
-    char size;
-    char buff[1024];
-    read(fd,&size,1);
-    for(int i = 0;i<(int)size-2;i++){
-        recv(fd,buff,1024,0);
-        printf("%s\n",buff);
-        write(fd,"3",1);
-    }
-}
-void send_list_of_files(int fd,char* path){
-    char buff[1024];
-    struct dirent ** namelist;
-    read(fd,buff,1024);
-    char n = scandir(path,&namelist,NULL,NULL);
-    write(fd, &n, 1);
-    for(int i = 2;i<n;i++){
-        sleep(0);
-        send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
-        while (read(fd,buff,1) < 0);
-    }
-}
 void recv_file(const char *path, int fd) {
     FILE *file = fopen(path, "wb");
     char * string = malloc(20);
     read(fd,string,sizeof (string));
     long long byte_size = getFileSizeFromString(string);
     free(string);
+    if(byte_size == 0){
+        fclose(file);
+        return;
+    }
     char buffer[1024];
     int total = 0;
     size_t n = 0;
