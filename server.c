@@ -1,5 +1,4 @@
 
-
 #include "fwrapper.h"
 #include <stdlib.h>
 #include <netinet/in.h>
@@ -13,7 +12,6 @@
 #include <sys/types.h>
 #include <string.h>
 #include <arpa/inet.h>
-#include <signal.h>
 struct ThreadArgs {
     int fd;
     char *name;
@@ -77,7 +75,6 @@ void menu_close_client(int *fd) {
     }
     free(fd);
     exit(1);
-    send_mutex_state_to_server
 }
 
 void menu_recv_files(int *fd) {
@@ -87,7 +84,7 @@ void menu_recv_files(int *fd) {
     printf("Введите именя файлов через пробел\n");
     int c;
     while ((c = getchar()) != '\n' && c != EOF) {
-        // очищаем оставшиеся символы новой строки во входном потоке
+
     }
 
     fgets(msg_buff, sizeof(msg_buff), stdin);
@@ -99,7 +96,7 @@ void menu_recv_files(int *fd) {
 
     read(fd[0], command_buff, COMMAND_SIZE);
 
-    if (compareCommands(command_buff, POSTIVE_ANSWER)) {
+    if (compare_commands(command_buff, POSTIVE_ANSWER)) {
         int count_use_threads = 0;
         pthread_t *array = malloc(sizeof(pthread_t)*4);
         for (int i = 0; i < (*n); i++) {
@@ -115,7 +112,7 @@ void menu_recv_files(int *fd) {
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_recv,&threadArgs);
             count_use_threads++;
             sleep(0);
-            printf("Count use threads in client %d \n",count_use_threads);
+          //  printf("Count use threads in client %d \n",count_use_threads);
         }
         for(int z = 0;z<count_use_threads;z++){
             pthread_join(array[z],NULL);
@@ -125,7 +122,6 @@ void menu_recv_files(int *fd) {
 
 void menu_send_file(int *fd, char *base_path) {
     char msg_buff[MSG_SIZE];
-    char command_buff[8];
 
     read(fd[0], msg_buff, MSG_SIZE);
     int *n = malloc(sizeof(int));
@@ -149,7 +145,7 @@ void menu_send_file(int *fd, char *base_path) {
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_send,&threadArgs);
             count_use_threads++;
             sleep(0);
-            printf("Count use threads in server %d \n",count_use_threads);
+          //  printf("Count use threads in server %d \n",count_use_threads);
         }
         for(int c = 0;c<count_use_threads;c++){
             pthread_join(array[c],NULL);
@@ -173,18 +169,34 @@ int client(char* base_path_server) {
             printf("Не удалось изменить рабочую директорию.\n");
         }
     }
-    printf("Введите IP: ");
     char ip[16];
-    scanf("%s", ip);
-    int *fd = malloc(sizeof(int) * 5);
-    for (int i = 0; i < 5; i++) {
-        fd[i] = Socket(AF_INET, SOCK_STREAM, 0);
-        struct sockaddr_in adr = {0};
-        adr.sin_family = AF_INET;
-        adr.sin_port = htons(10000);
-        Inet_pton(AF_INET, ip, &adr.sin_addr);
-        Connect(fd[i], &adr, sizeof(adr));
-    }
+    int success = 0;
+    int *fd;
+    do {
+        printf("Введите IP-адрес сервера: ");
+        scanf("%s", ip);
+        fd = malloc(sizeof(int) * 5);
+        for (int i = 0; i < 5; i++) {
+            fd[i] = socket(AF_INET, SOCK_STREAM, 0);
+            struct sockaddr_in adr = {0};
+            adr.sin_family = AF_INET;
+            adr.sin_port = htons(10000);
+            if (Inet_pton(AF_INET, ip, &adr.sin_addr) <= 0) {
+                printf("Некорректный IP-адрес. Повторите ввод.\n");
+                success = 0;
+                free(fd);
+                break;
+            }
+            if (Connect(fd[i], &adr, sizeof(adr)) < 0) {
+                printf("Не удалось подключиться к серверу. Повторите ввод.\n");
+                success = 0;
+                free(fd);
+                break;
+            }
+            success = 1;
+        }
+
+    } while (!success);
 
 
     while (1) {
@@ -202,8 +214,6 @@ int client(char* base_path_server) {
             menu_close_client(fd);
         }
     }
-
-    return 1;
 }
 
 int server() {
@@ -211,7 +221,6 @@ int server() {
     char base_path[128] = "recv/\0";
     char cwd[256];
     if (getcwd(cwd, sizeof(cwd)) != NULL) {
-        // Записываем текущую директорию в целевую строку
         char target[256];
         strcpy(target, cwd);
         printf("Текущая директория: %s\n", target);
@@ -242,7 +251,7 @@ int server() {
     int pid = fork();
     if (pid == 0) {
         client(base_path);
-        exit(0);  // Завершение дочернего процесса
+        exit(0);
     }
     chdir(base_path);
     int *fd = malloc(sizeof(int) * 5);
@@ -256,11 +265,6 @@ int server() {
         if((*choise) == '2') send_list_of_files(fd[0],"./");
         if ((*choise) == '3') menu_close_server(fd, server_socket);
     }
-
-    char command_buff[COMMAND_SIZE];
-
-
-    return 1;
 }
 
 int main() {

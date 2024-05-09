@@ -1,11 +1,7 @@
 
-//
-// Created by vadim on 28.3.24.
-//
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
-#include <unistd.h>
 #include "stdio.h"
 #include "arpa/inet.h"
 #include "fwrapper.h"
@@ -59,8 +55,8 @@ int Inet_pton(int af, const char *src, void *dst) {
         return -1;
     }
     if (res == -1) {
-        return 1;
-    } else {
         return -1;
+    } else {
+        return 11;
     }
 }

@@ -1,7 +1,3 @@
-//
-// Created by vadim on 31.3.24.
-//
-
 #ifndef FILESHARE_GLOBALCONSTANTS_H
 #define FILESHARE_GLOBALCONSTANTS_H
 

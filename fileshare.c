@@ -9,73 +9,40 @@
 #include <sys/stat.h>
 #include <libgen.h>
 #include "fileshare.h"
-char** remove_duplicates(char** strings, int count, int* new_count) {
-    char** unique_strings = malloc(count * sizeof(char*));
-    int unique_count = 0;
 
-    for (int i = 0; i < count; i++) {
-        int is_duplicate = 0;
 
-        for (int j = 0; j < unique_count; j++) {
-            if (strcmp(strings[i], unique_strings[j]) == 0) {
-                is_duplicate = 1;
-                break;
-            }
-        }
-
-        if (!is_duplicate) {
-            unique_strings[unique_count++] = strdup(strings[i]);
-        }
-    }
-
-    *new_count = unique_count;
-
-    return unique_strings;
-}
-int check_duplicates(char** strings, int count) {
-    for (int i = 0; i < count; i++) {
-        for (int j = i + 1; j < count; j++) {
-            if (strcmp(strings[i], strings[j]) == 0) {
-                return 0;  // Найдено совпадение, возвращаем 0
-            }
-        }
-    }
-
-    return 1;  // Совпадений не найдено
-}
-
-unsigned char compareCommands(const char com1[8],const char com2[8]){
-    for(int i = 0;i<8;i++){
-        if(com1[i]!=com2[i]) return 0;
+unsigned char compare_commands(const char com1[8], const char com2[8]) {
+    for (int i = 0; i < 8; i++) {
+        if (com1[i] != com2[i]) return 0;
     }
     return 1;
 }
 
-unsigned char check_files(const char message[2048], const char* path) {
+unsigned char check_files(const char message[2048], const char *path) {
 
     struct dirent **namelist;
     int n = scandir(path, &namelist, NULL, NULL);
-    if(n == 0) return 0;
+    if (n == 0) return 0;
 
-    int* count_files_in_msg = malloc(sizeof (int));
-    char** names = split_words(message,count_files_in_msg);
+    int *count_files_in_msg = malloc(sizeof(int));
+    char **names = split_words(message, count_files_in_msg);
     int match = 0;
-    for(int i = 0;i<(*count_files_in_msg);i++){
-        for(int j = 0;j<n;j++){
-            if(strcmp(namelist[j]->d_name,names[i]) == 0){
+    for (int i = 0; i < (*count_files_in_msg); i++) {
+        for (int j = 0; j < n; j++) {
+            if (strcmp(namelist[j]->d_name, names[i]) == 0 && namelist[j]->d_type == 8) {
                 match++;
                 break;
             }
         }
     }
-    for(int i = 0;i<n;i++){
+    for (int i = 0; i < n; i++) {
         free(namelist[i]);
     }
-    for(int i = 0;i<(*count_files_in_msg);i++){
+    for (int i = 0; i < (*count_files_in_msg); i++) {
         free(names[i]);
     }
     free(names);
-    if(match == (*count_files_in_msg)){
+    if (match == (*count_files_in_msg)) {
 
         free(namelist);
         free(count_files_in_msg);
@@ -84,33 +51,9 @@ unsigned char check_files(const char message[2048], const char* path) {
     free(count_files_in_msg);
     return 0;
 }
-int count_words(const char message[2048]) {
-    int wordCount = 0;
-    int inWord = 0;
 
-    for (int i = 0; i < 2048; i++) {
-        if (message[i] == ' ' || message[i] == '\n' || message[i] == '\0') {
-            if (inWord) {
-                inWord = 0;
-                wordCount++;
-            }
-        } else {
-            inWord = 1;
-        }
-    }
-
-    return wordCount;
-}
-char* concatenateStrings(const char *str1, const char *str2) {
-    char *result = malloc(strlen(str1) + strlen(str2) + 1);
-    if (result == NULL) {
-        fprintf(stderr, "Memory allocation error\n");
-    }
-    sprintf(result, "%s%s", str1, str2);
-    return result;
-}
-char** split_words(const char message[2048], int* wordCount) {
-    char** words = NULL;
+char **split_words(const char message[2048], int *wordCount) {
+    char **words = NULL;
     *wordCount = 0;
 
     // Копируем сообщение во временный буфер для обработки
@@ -118,78 +61,78 @@ char** split_words(const char message[2048], int* wordCount) {
     strcpy(buffer, message);
 
     // Используем strtok для разделения строки на слова
-    char* token = strtok(buffer, " \n");
+    char *token = strtok(buffer, " \n");
     while (token != NULL) {
         (*wordCount)++;
 
-        // Увеличиваем размер массива слов
-        words = realloc(words, sizeof(char*) * (*wordCount));
+        words = realloc(words, sizeof(char *) * (*wordCount));
 
-        // Выделяем память для хранения копии слова и копируем его
         words[*wordCount - 1] = malloc(strlen(token) + 1);
         strcpy(words[*wordCount - 1], token);
 
-        // Получаем следующее слово
         token = strtok(NULL, " \n");
     }
 
     return words;
 }
-struct dirent** scandir_reg(int*n){
-    struct dirent ** namelist;
-    int count = scandir("./",&namelist,NULL,NULL);
+
+struct dirent **scandir_reg(int *n) {
+    struct dirent **namelist;
+    int count = scandir("./", &namelist, NULL, NULL);
     int count_reg_files = 0;
-    for(int i = 0;i<count;i++){
-        if(namelist[i]->d_type == DT_REG){
+    for (int i = 0; i < count; i++) {
+        if (namelist[i]->d_type == 8) {
             count_reg_files++;
         }
     }
-    struct dirent** result = malloc(sizeof (struct dirent*)*count_reg_files);
+    struct dirent **result = malloc(sizeof(struct dirent *) * count_reg_files);
     (*n) = 0;
-    for(int i = 0;i<count;i++){
-        if(namelist[i]->d_type == DT_REG){
-             result[(*n)] = namelist[i];
-             (*n)++;
+    for (int i = 0; i < count; i++) {
+        if (namelist[i]->d_type == 8) {
+            result[(*n)] = namelist[i];
+            (*n)++;
         }
     }
     return result;
 }
 
-void recv_list_of_files(int fd){
-    write(fd,"3",1);
+void recv_list_of_files(int fd) {
+    write(fd, "3", 1);
     char size[8];
     char buff[1024];
-    read(fd,&size,8);
+    read(fd, &size, 8);
     int n = atoi(size);
-    for(int i = 0;i<n;i++){
-        recv(fd,buff,1024,0);
-        printf("%s ",buff);
-        write(fd,"3",1);
+    for (int i = 0; i < n; i++) {
+        recv(fd, buff, 1024, 0);
+        printf("%s ", buff);
+        write(fd, "3", 1);
     }
     printf("\n");
 }
-void send_list_of_files(int fd,char* path){
+
+void send_list_of_files(int fd, char *path) {
     char buff[1024];
-    int* n = malloc(sizeof (int));
-    struct dirent ** namelist = scandir_reg(n);
-    read(fd,buff,1024);
+    int *n = malloc(sizeof(int));
+    struct dirent **namelist = scandir_reg(n);
+    read(fd, buff, 1024);
     char buffer[8];
     snprintf(buffer, sizeof(buffer), "%d", (*n));
     write(fd, &buffer, 8);
-    for(int i = 0;i<(*n);i++){
+    for (int i = 0; i < (*n); i++) {
         sleep(0);
-        send(fd,namelist[i]->d_name,sizeof (namelist[i]->d_name),0);
-        while (read(fd,buff,1) < 0);
+        send(fd, namelist[i]->d_name, sizeof(namelist[i]->d_name), 0);
+        while (read(fd, buff, 1) < 0);
     }
 }
+
 void send_file(const char *path, int fd) {
     FILE *file = fopen(path, "rb");
     long long byte_size = getFileSize(path);
-    char* string = getFileSizeString(byte_size);
-    printf("Size string %s in send %s\n",path,string);
-    write(fd,string,sizeof (string));
+    char *string = getFileSizeString(byte_size);
+  //  printf("Size string %s in send %s\n", path, string);
+    write(fd, string, sizeof(string));
     free(string);
-    if(byte_size == 0){
+    if (byte_size == 0) {
         fclose(file);
         return;
     }
@@ -201,21 +144,22 @@ void send_file(const char *path, int fd) {
         n = fread(buffer, 1, 1024, file);
 
         //  printf("%d\n",(int)n);
-        total += send(fd,buffer,n,0);
-        if(total >= byte_size) break;
+        total += send(fd, buffer, n, 0);
+        if (total >= byte_size) break;
     }
-    printf("Total send of %s %d\n",path,total);
+    printf("Total send of %s %d\n", path, total);
     fclose(file);
-    while (read(fd,buffer,1) < 0);
+    while (read(fd, buffer, 1) < 0);
 }
+
 void recv_file(const char *path, int fd) {
     FILE *file = fopen(path, "wb");
-    char * string = malloc(20);
-    read(fd,string,sizeof (string));
-    printf("Size string %s in recv %s\n",path,string);
+    char *string = malloc(20);
+    read(fd, string, sizeof(string));
+ //   printf("Size string %s in recv %s\n", path, string);
     long long byte_size = getFileSizeFromString(string);
     free(string);
-    if(byte_size == 0){
+    if (byte_size == 0) {
         fclose(file);
         return;
     }
@@ -225,22 +169,18 @@ void recv_file(const char *path, int fd) {
     while (1) {
         n = recv(fd, buffer, 1024, 0);
         // printf("%d\n",(int)n);
-        total += fwrite(buffer,1,n,file);
-        if(total >= byte_size) break;
+        total += fwrite(buffer, 1, n, file);
+        if (total >= byte_size) break;
     }
-    printf("Total recv of %s %d\n",path,total);
+    printf("Total recv of %s %d\n", path, total);
     fclose(file);
-    write(fd,"1",1);
-}
-char* getFileName(const char* path) {
-    char* fileName = basename((char *)path);
-    return fileName;
+    write(fd, "1", 1);
 }
 
 long long getFileSize(const char *path) {
     struct stat file_info;
     if (stat(path, &file_info) == 0) {
-        long long fileSize = (long long)file_info.st_size;
+        long long fileSize = (long long) file_info.st_size;
         return fileSize;
     } else {
         perror("Failed to get file information");
@@ -249,14 +189,14 @@ long long getFileSize(const char *path) {
 }
 
 // Функция для получения размера файла в виде строки
-char* getFileSizeString(long long fileSize) {
-    char* fileSizeString = (char*)malloc(20 * sizeof(char));  // Максимальная длина - 20 символов
+char *getFileSizeString(long long fileSize) {
+    char *fileSizeString = (char *) malloc(20 * sizeof(char));  // Максимальная длина - 20 символов
     sprintf(fileSizeString, "%lld", fileSize);
     return fileSizeString;
 }
 
-long long getFileSizeFromString(const char* fileSizeString) {
-    char* endPtr;
+long long getFileSizeFromString(const char *fileSizeString) {
+    char *endPtr;
     long long fileSize = strtoll(fileSizeString, &endPtr, 10);
 
     if (fileSize == 0 && endPtr == fileSizeString) {
