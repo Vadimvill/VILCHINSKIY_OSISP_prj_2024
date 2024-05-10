@@ -8,4 +8,4 @@ fileshare: server.c
 
 
 clean:
-	rm -f parent child
+	rm -f fileshare

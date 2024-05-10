@@ -31,6 +31,7 @@ void *thread_function_recv(void *arg) {
     recv_file(file_name, file_descriptor);
     pthread_exit(NULL);
 }
+
 void print_local_ip(int port) {
     struct ifaddrs *addrs, *tmp;
     getifaddrs(&addrs);
@@ -41,10 +42,9 @@ void print_local_ip(int port) {
             struct sockaddr_in *pAddr = (struct sockaddr_in *) tmp->ifa_addr;
             char *ip = inet_ntoa(pAddr->sin_addr);
 
-            // Проверяем, что IP-адрес принадлежит локальной сети
             if (strncmp(ip, "192.168.", 8) == 0 || strncmp(ip, "10.", 3) == 0) {
                 printf("Server address: %s:%d\n", ip, port);
-                break; // Мы нашли IP-адрес в локальной сети, поэтому выходим из цикла
+                break;
             }
         }
         tmp = tmp->ifa_next;
@@ -52,12 +52,6 @@ void print_local_ip(int port) {
 
     freeifaddrs(addrs);
 }
-
-void clear_input_buffer() {
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF) {}
-}
-
 
 void menu_close_server(int *fd, int server) {
     sleep(1);
@@ -112,12 +106,20 @@ void menu_recv_files(int *fd) {
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_recv,&threadArgs);
             count_use_threads++;
             sleep(0);
-          //  printf("Count use threads in client %d \n",count_use_threads);
         }
         for(int z = 0;z<count_use_threads;z++){
             pthread_join(array[z],NULL);
         }
+        for(int c = 0;c<count_use_threads;c++){
+            pthread_join(array[c],NULL);
+        }
+        free(array);
     }
+    for(int i = 0;i<(*n);i++){
+        free(names[i]);
+    }
+    free(names);
+    free(n);
 }
 
 void menu_send_file(int *fd, char *base_path) {
@@ -145,11 +147,16 @@ void menu_send_file(int *fd, char *base_path) {
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_send,&threadArgs);
             count_use_threads++;
             sleep(0);
-          //  printf("Count use threads in server %d \n",count_use_threads);
         }
         for(int c = 0;c<count_use_threads;c++){
             pthread_join(array[c],NULL);
         }
+        free(array);
+        for(int i = 0;i<(*n);i++){
+            free(names[i]);
+        }
+        free(names);
+        free(n);
     } else write(fd[0], NEGATIVE_ANSWER, COMMAND_SIZE);
 }
 
@@ -159,14 +166,14 @@ int client(char* base_path_server) {
     while (1){
         scanf("%s", base_path);
         if(strncmp(base_path,base_path_server,128) == 0){
-            printf("Не удалось изменить рабочую директорию т.к у сервера такая же.\n");
+            printf("Не удалось изменить рабочий каталог т.к у сервера такой же.\n");
             continue;
         }
         if (chdir(base_path) == 0) {
-            printf("Рабочая директория изменена на: %s\n", base_path);
+            printf("Рабочий каталог изменен на: %s\n", base_path);
             break;
         } else {
-            printf("Не удалось изменить рабочую директорию.\n");
+            printf("Не удалось изменить рабочий каталог.\n");
         }
     }
     char ip[16];
@@ -211,6 +218,7 @@ int client(char* base_path_server) {
             recv_list_of_files(fd[0]);
         }
         if ((*choise) == '3'){
+            free(choise);
             menu_close_client(fd);
         }
     }
@@ -231,10 +239,10 @@ int server() {
     while (1){
         scanf("%s", base_path);
         if (chdir(base_path) == 0) {
-            printf("Рабочая директория изменена на: %s\n", base_path);
+            printf("Рабочий каталог изменен на: %s\n", base_path);
             break;
         } else {
-            printf("Не удалось изменить рабочую директорию.\n");
+            printf("Не удалось изменить рабочий каталог.\n");
         }
     }
     chdir(cwd);
@@ -263,7 +271,10 @@ int server() {
         read(fd[0], choise, 1);
         if ((*choise) == '1') menu_send_file(fd,base_path);
         if((*choise) == '2') send_list_of_files(fd[0],"./");
-        if ((*choise) == '3') menu_close_server(fd, server_socket);
+        if ((*choise) == '3'){
+            free(choise);
+            menu_close_server(fd, server_socket);
+        }
     }
 }
 

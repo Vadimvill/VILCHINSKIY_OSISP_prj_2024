@@ -56,11 +56,9 @@ char **split_words(const char message[2048], int *wordCount) {
     char **words = NULL;
     *wordCount = 0;
 
-    // Копируем сообщение во временный буфер для обработки
     char buffer[2048];
     strcpy(buffer, message);
 
-    // Используем strtok для разделения строки на слова
     char *token = strtok(buffer, " \n");
     while (token != NULL) {
         (*wordCount)++;
@@ -123,13 +121,17 @@ void send_list_of_files(int fd, char *path) {
         send(fd, namelist[i]->d_name, sizeof(namelist[i]->d_name), 0);
         while (read(fd, buff, 1) < 0);
     }
+    for(int i = 0;i<(*n);i++){
+        free(namelist[i]);
+    }
+    free(namelist);
+    free(n);
 }
 
 void send_file(const char *path, int fd) {
     FILE *file = fopen(path, "rb");
     long long byte_size = getFileSize(path);
     char *string = getFileSizeString(byte_size);
-  //  printf("Size string %s in send %s\n", path, string);
     write(fd, string, sizeof(string));
     free(string);
     if (byte_size == 0) {
@@ -142,8 +144,6 @@ void send_file(const char *path, int fd) {
     while (1) {
         sleep(0);
         n = fread(buffer, 1, 1024, file);
-
-        //  printf("%d\n",(int)n);
         total += send(fd, buffer, n, 0);
         if (total >= byte_size) break;
     }
@@ -156,7 +156,6 @@ void recv_file(const char *path, int fd) {
     FILE *file = fopen(path, "wb");
     char *string = malloc(20);
     read(fd, string, sizeof(string));
- //   printf("Size string %s in recv %s\n", path, string);
     long long byte_size = getFileSizeFromString(string);
     free(string);
     if (byte_size == 0) {
@@ -168,7 +167,6 @@ void recv_file(const char *path, int fd) {
     size_t n = 0;
     while (1) {
         n = recv(fd, buffer, 1024, 0);
-        // printf("%d\n",(int)n);
         total += fwrite(buffer, 1, n, file);
         if (total >= byte_size) break;
     }
@@ -188,9 +186,8 @@ long long getFileSize(const char *path) {
     }
 }
 
-// Функция для получения размера файла в виде строки
 char *getFileSizeString(long long fileSize) {
-    char *fileSizeString = (char *) malloc(20 * sizeof(char));  // Максимальная длина - 20 символов
+    char *fileSizeString = (char *) malloc(20 * sizeof(char));
     sprintf(fileSizeString, "%lld", fileSize);
     return fileSizeString;
 }
