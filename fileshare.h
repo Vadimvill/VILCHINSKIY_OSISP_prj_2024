@@ -15,10 +15,12 @@ extern int scandir(const char *__restrict __dir,
                                 const struct dirent **))
 __nonnull ((1, 2));
 
-void send_file(const char *path, int fd);
+void send_file(const char *path, int fd,int command_fd);
+int* init_client(char ip[16]);
+int* init_server(int print);
 
 
-void recv_file(const char *path, int fd);
+void recv_file(const char *path, int fd,int command_fd);
 
 
 void send_list_of_files(int fd, char *path);

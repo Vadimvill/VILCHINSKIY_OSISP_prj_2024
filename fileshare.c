@@ -8,8 +8,38 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <libgen.h>
+#include <fcntl.h>
+#include <openssl/md5.h>
+#include <ifaddrs.h>
+#include <arpa/inet.h>
 #include "fileshare.h"
+#include "fwrapper.h"
 
+#define BUFFER_SIZE 4096
+
+int set_blocking_mode(int fd, int blocking) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) {
+        perror("fcntl F_GETFL");
+        return -1;
+    }
+
+    if (blocking) {
+        flags &= ~O_NONBLOCK;
+    } else {
+        flags |= O_NONBLOCK;
+    }
+
+    if (fcntl(fd, F_SETFL, flags) == -1) {
+        perror("fcntl F_SETFL");
+        return -1;
+    }
+
+    return 0;
+}
+
+
+extern int usleep(__useconds_t __useconds);
 
 unsigned char compare_commands(const char com1[8], const char com2[8]) {
     for (int i = 0; i < 8; i++) {
@@ -50,6 +80,27 @@ unsigned char check_files(const char message[2048], const char *path) {
     }
     free(count_files_in_msg);
     return 0;
+}
+
+void print_local_ip(int port) {
+    struct ifaddrs *addrs, *tmp;
+    getifaddrs(&addrs);
+    tmp = addrs;
+
+    while (tmp) {
+        if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
+            struct sockaddr_in *pAddr = (struct sockaddr_in *) tmp->ifa_addr;
+            char *ip = inet_ntoa(pAddr->sin_addr);
+
+            if (strncmp(ip, "192.168.", 8) == 0 || strncmp(ip, "10.", 3) == 0) {
+                printf("Server address: %s:%d\n", ip, port);
+                break;
+            }
+        }
+        tmp = tmp->ifa_next;
+    }
+
+    freeifaddrs(addrs);
 }
 
 char **split_words(const char message[2048], int *wordCount) {
@@ -94,6 +145,55 @@ struct dirent **scandir_reg(int *n) {
     return result;
 }
 
+int *init_client(char ip[16]) {
+    int success = 0;
+    int *fd;
+    do {
+        fd = malloc(sizeof(int) * 5);
+        for (int i = 0; i < 5; i++) {
+            fd[i] = socket(AF_INET, SOCK_STREAM, 0);
+            struct sockaddr_in adr = {0};
+            adr.sin_family = AF_INET;
+            adr.sin_port = htons(10000);
+            if (Inet_pton(AF_INET, ip, &adr.sin_addr) <= 0) {
+                printf("Некорректный IP-адрес. Повторите ввод.\n");
+                printf("Введите IP-адрес сервера: ");
+                scanf("%s", ip);
+                success = 0;
+                free(fd);
+                break;
+            }
+            if (Connect(fd[i], &adr, sizeof(adr)) < 0) {
+                printf("Не удалось подключиться к серверу. Повторите ввод.\n");
+                success = 0;
+                free(fd);
+                break;
+            }
+            success = 1;
+        }
+
+    } while (!success);
+    return fd;
+}
+
+int *init_server(int print) {
+    int server_socket = Socket(AF_INET, SOCK_STREAM, 0);
+    fcntl(server_socket, F_GETFL, 0);
+    struct sockaddr_in adr = {0};
+    adr.sin_family = AF_INET;
+    adr.sin_port = htons(10000);
+    Bind(server_socket, &adr, sizeof(adr));
+    Listen(server_socket, 5);
+    socklen_t addrlen = sizeof(adr);
+    if (print) print_local_ip(10000);
+    int *fd = malloc(sizeof(int) * 6);
+    fd[5] = server_socket;
+    for (int i = 0; i < 5; i++) {
+        fd[i] = Accept(server_socket, &adr, addrlen);
+    }
+    return fd;
+}
+
 void recv_list_of_files(int fd) {
     write(fd, "3", 1);
     char size[8];
@@ -106,6 +206,7 @@ void recv_list_of_files(int fd) {
         write(fd, "3", 1);
     }
     printf("\n");
+    lseek(fd, 0, SEEK_SET);
 }
 
 void send_list_of_files(int fd, char *path) {
@@ -121,58 +222,110 @@ void send_list_of_files(int fd, char *path) {
         send(fd, namelist[i]->d_name, sizeof(namelist[i]->d_name), 0);
         while (read(fd, buff, 1) < 0);
     }
-    for(int i = 0;i<(*n);i++){
+    for (int i = 0; i < (*n); i++) {
         free(namelist[i]);
     }
+    lseek(fd, 0, SEEK_SET);
     free(namelist);
     free(n);
 }
 
-void send_file(const char *path, int fd) {
-    FILE *file = fopen(path, "rb");
-    long long byte_size = getFileSize(path);
-    char *string = getFileSizeString(byte_size);
-    write(fd, string, sizeof(string));
-    free(string);
-    if (byte_size == 0) {
-        fclose(file);
-        return;
-    }
-    char buffer[1024];
-    int total = 0;
-    size_t n = 0;
-    while (1) {
-        sleep(0);
-        n = fread(buffer, 1, 1024, file);
-        total += send(fd, buffer, n, 0);
-        if (total >= byte_size) break;
-    }
-    printf("Total send of %s %d\n", path, total);
-    fclose(file);
-    while (read(fd, buffer, 1) < 0);
+void sendMessage(char *message, int fd) {
+    char buffer[BUFFER_SIZE];
+    send(fd, message, strlen(message), 0);
+    recv(fd, buffer, BUFFER_SIZE, 0);
 }
 
-void recv_file(const char *path, int fd) {
-    FILE *file = fopen(path, "wb");
-    char *string = malloc(20);
-    read(fd, string, sizeof(string));
-    long long byte_size = getFileSizeFromString(string);
-    free(string);
-    if (byte_size == 0) {
-        fclose(file);
-        return;
-    }
-    char buffer[1024];
+char *recieveMessage(int fd) {
+    rewind(stdin);
+    char buffer[BUFFER_SIZE];
+    char *answer = "message sent";
+    ssize_t n = recv(fd, buffer, BUFFER_SIZE, 0);
+    send(fd, answer, strlen(answer), 0);
+    char *message = (char *) malloc((n + 1) * sizeof(char));
+    strcpy(message, buffer);
+    message[n] = '\0';
+    return message;
+}
+
+
+void send_file(const char *path, int fd,int command_fd) {
+    int file_fd = open(path, O_RDWR);
+    long long byte_size = getFileSize(path);
+    char str[50];
+    sprintf(str, "%lld", byte_size);
+    size_t size = 1024*64;
+    char *file_bytes = malloc(size);
+    send(fd, str, 50, 0);
     int total = 0;
-    size_t n = 0;
-    while (1) {
-        n = recv(fd, buffer, 1024, 0);
-        total += fwrite(buffer, 1, n, file);
-        if (total >= byte_size) break;
+    int total_read = 0;
+    int count_iter = 0;
+    while (1){
+        char command_buff[8];
+        int n = read(file_fd,file_bytes,size);
+        total_read += n;
+        count_iter++;
+        printf("Read%d\n",n);
+        printf("Total_read%d\n",total_read);
+        printf("Count_iter%d\n",count_iter);
+        if(n == 0){
+            send(command_fd,NEGATIVE_ANSWER,8,0);
+            recv(command_fd,command_buff,8,0);
+            break;
+        }
+        int b = send(fd,file_bytes,n,0);
+        total+=b;
+        printf("Send%d\n",b);
+        printf("Total send%d\n",total);
+        send(command_fd,POSTIVE_ANSWER,8,0);
+        recv(command_fd,command_buff,8,0);
     }
-    printf("Total recv of %s %d\n", path, total);
-    fclose(file);
-    write(fd, "1", 1);
+    free(file_bytes);
+    close(file_fd);
+}
+
+void recv_file(const char *path, int fd,int command_fd) {
+    char str[50];
+    long long byte_size;
+    char *endptr;
+    recv(fd, str, 50, 0);
+    byte_size = strtoll(str, &endptr, 10);
+    int size = 1024*64;
+    char *file_bytes = malloc(size);
+    int file_fd = open(path, O_RDWR | O_CREAT,0644);
+    int total = 0;
+    int total_write = 0;
+    int count_iter = 0;
+    while (1) {
+        char command_buf[8];
+        recv(command_fd,command_buf,8,0);
+        if(compare_commands(command_buf,POSTIVE_ANSWER)){
+            int n = recv(fd,file_bytes,size,0);
+            total+=n;
+            printf("Recv%d\n",n);
+            printf("Total recv%d\n",total);
+            count_iter++;
+            printf("Count_iter%d\n",count_iter);
+            int b = write(file_fd,file_bytes,n);
+            total_write+=b;
+            printf("Write%d\n",b);
+            printf("Total_Write%d\n",total_write);
+            send(command_fd,POSTIVE_ANSWER,8,0);
+        } else{
+            int n = recv(fd,file_bytes,size,0);
+            total+=n;
+            printf("Recv%d\n",n);
+            printf("Total recv%d\n",total);
+            count_iter++;
+            printf("Count_iter%d\n",count_iter);
+            int b = write(file_fd,file_bytes,n);
+            total_write+=b;
+            printf("Write%d\n",b);
+            printf("Total_Write%d\n",total_write);
+        }
+    }
+    free(file_bytes);
+    close(file_fd);
 }
 
 long long getFileSize(const char *path) {
@@ -194,7 +347,7 @@ char *getFileSizeString(long long fileSize) {
 
 long long getFileSizeFromString(const char *fileSizeString) {
     char *endPtr;
-    long long fileSize = strtoll(fileSizeString, &endPtr, 10);
+    long long fileSize = strtoll(fileSizeString, &endPtr, 20);
 
     if (fileSize == 0 && endPtr == fileSizeString) {
         fprintf(stderr, "Invalid file size string: %s\n", fileSizeString);

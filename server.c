@@ -12,15 +12,19 @@
 #include <sys/types.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <signal.h>
+int* copy_fd;
 struct ThreadArgs {
     int fd;
     char *name;
+    int command_fd;
 };
 void *thread_function_send(void *arg) {
     struct ThreadArgs *args = (struct ThreadArgs *) arg;
     int file_descriptor = args->fd;
     char *file_name = args->name;
-    send_file(file_name, file_descriptor);
+    int command_fd = args->command_fd;
+    send_file(file_name, file_descriptor,command_fd);
     pthread_exit(NULL);
 }
 
@@ -28,47 +32,28 @@ void *thread_function_recv(void *arg) {
     struct ThreadArgs *args = (struct ThreadArgs *) arg;
     int file_descriptor = args->fd;
     char *file_name = args->name;
-    recv_file(file_name, file_descriptor);
+    int command_fd = args->command_fd;
+    recv_file(file_name, file_descriptor,command_fd);
     pthread_exit(NULL);
 }
 
-void print_local_ip(int port) {
-    struct ifaddrs *addrs, *tmp;
-    getifaddrs(&addrs);
-    tmp = addrs;
-
-    while (tmp) {
-        if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_INET) {
-            struct sockaddr_in *pAddr = (struct sockaddr_in *) tmp->ifa_addr;
-            char *ip = inet_ntoa(pAddr->sin_addr);
-
-            if (strncmp(ip, "192.168.", 8) == 0 || strncmp(ip, "10.", 3) == 0) {
-                printf("Server address: %s:%d\n", ip, port);
-                break;
-            }
-        }
-        tmp = tmp->ifa_next;
-    }
-
-    freeifaddrs(addrs);
-}
 
 void menu_close_server(int *fd, int server) {
     sleep(1);
-    close(server);
     for (int i = 0; i < 5; i++) {
         close(fd[i]);
     }
-    free(fd);
-    exit(1);
+    close(server);
+    printf("closet\n");
+    sleep(1);
+
 }
 
 void menu_close_client(int *fd) {
     for (int i = 0; i < 5; i++) {
         close(fd[i]);
     }
-    free(fd);
-    exit(1);
+    printf("closet client\n");
 }
 
 void menu_recv_files(int *fd) {
@@ -102,7 +87,8 @@ void menu_recv_files(int *fd) {
             }
             struct ThreadArgs threadArgs;
             threadArgs.name = names[i];
-            threadArgs.fd = fd[count_use_threads+1];
+            threadArgs.fd = fd[1];
+            threadArgs.command_fd = fd[0];
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_recv,&threadArgs);
             count_use_threads++;
             sleep(0);
@@ -144,6 +130,7 @@ void menu_send_file(int *fd, char *base_path) {
             struct ThreadArgs threadArgs;
             threadArgs.name = names[i];
             threadArgs.fd = fd[count_use_threads+1];
+            threadArgs.command_fd = fd[0];
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_send,&threadArgs);
             count_use_threads++;
             sleep(0);
@@ -159,8 +146,17 @@ void menu_send_file(int *fd, char *base_path) {
         free(n);
     } else write(fd[0], NEGATIVE_ANSWER, COMMAND_SIZE);
 }
-
-int client(char* base_path_server) {
+void clean_up_server(int sig) {
+    menu_close_server(copy_fd, copy_fd[5]);
+    free(copy_fd);
+    exit(0);
+}
+void clean_up_client(int sig) {
+    menu_close_client(copy_fd);
+    free(copy_fd);
+    exit(0);
+}
+int client(char* base_path_server,int ppid) {
     printf("Установите базовый каталог для сохранения файлов\n");
     char base_path[128];
     while (1){
@@ -176,54 +172,43 @@ int client(char* base_path_server) {
             printf("Не удалось изменить рабочий каталог.\n");
         }
     }
-    char ip[16];
-    int success = 0;
+    char *ip = malloc(16);
+    printf("Введите IP-адрес сервера: ");
+    scanf("%s", ip);
     int *fd;
-    do {
-        printf("Введите IP-адрес сервера: ");
-        scanf("%s", ip);
-        fd = malloc(sizeof(int) * 5);
-        for (int i = 0; i < 5; i++) {
-            fd[i] = socket(AF_INET, SOCK_STREAM, 0);
-            struct sockaddr_in adr = {0};
-            adr.sin_family = AF_INET;
-            adr.sin_port = htons(10000);
-            if (Inet_pton(AF_INET, ip, &adr.sin_addr) <= 0) {
-                printf("Некорректный IP-адрес. Повторите ввод.\n");
-                success = 0;
-                free(fd);
-                break;
-            }
-            if (Connect(fd[i], &adr, sizeof(adr)) < 0) {
-                printf("Не удалось подключиться к серверу. Повторите ввод.\n");
-                success = 0;
-                free(fd);
-                break;
-            }
-            success = 1;
-        }
-
-    } while (!success);
-
-
+    signal(SIGTERM,clean_up_client);
+    fd = init_client(ip);
+    copy_fd = fd;
     while (1) {
         char *choise = malloc(1);
         printf("1.Скачать файлы\n2.Список файлов\n3.Закрыть соединение\n");
         scanf(" %c", choise);
+        char buff[8];
         write(fd[0], choise, 1);
         if ((*choise) == '1'){
             menu_recv_files(fd);
+            menu_close_client(fd);
+            sleep(3);
+            fd = init_client(ip);
+            copy_fd = fd;
         }
         if((*choise) == '2'){
             recv_list_of_files(fd[0]);
+            menu_close_client(fd);
+            sleep(3);
+            fd = init_client(ip);
+            copy_fd = fd;
         }
         if ((*choise) == '3'){
             free(choise);
             menu_close_client(fd);
+            free(fd);
+            sleep(2);
+            kill(ppid,SIGTERM);
+            exit(1);
         }
     }
 }
-
 int server() {
     printf("Установите базовый каталог для отправки файлов\n");
     char base_path[128] = "recv/\0";
@@ -246,34 +231,39 @@ int server() {
         }
     }
     chdir(cwd);
-    int server_socket = Socket(AF_INET, SOCK_STREAM, 0);
-
-    fcntl(server_socket, F_GETFL, 0);
-    struct sockaddr_in adr = {0};
-    adr.sin_family = AF_INET;
-    adr.sin_port = htons(10000);
-    Bind(server_socket, &adr, sizeof(adr));
-    Listen(server_socket, 5);
-    socklen_t addrlen = sizeof(adr);
-    print_local_ip(10000);
+    int ppid = getpid();
     int pid = fork();
     if (pid == 0) {
-        client(base_path);
+        client(base_path,ppid);
         exit(0);
     }
+    signal(SIGTERM,clean_up_server);
     chdir(base_path);
-    int *fd = malloc(sizeof(int) * 5);
-    for (int i = 0; i < 5; i++) {
-        fd[i] = Accept(server_socket, &adr, addrlen);
-    }
+    int*fd;
+    fd = init_server(1);
+    copy_fd = fd;
     while (1) {
         char *choise = malloc(1);
         read(fd[0], choise, 1);
-        if ((*choise) == '1') menu_send_file(fd,base_path);
-        if((*choise) == '2') send_list_of_files(fd[0],"./");
+        char buff[8];
+        if ((*choise) == '1'){
+            menu_send_file(fd,base_path);
+            menu_close_server(fd,fd[5]);
+            fd = init_server(0);
+            copy_fd = fd;
+        }
+        if((*choise) == '2'){
+            send_list_of_files(fd[0],"./");
+            menu_close_server(fd,fd[5]);
+            fd = init_server(0);
+            copy_fd = fd;
+        }
         if ((*choise) == '3'){
             free(choise);
-            menu_close_server(fd, server_socket);
+            menu_close_server(fd, fd[5]);
+            free(fd);
+            kill(pid,SIGTERM);
+            exit(1);
         }
     }
 }
