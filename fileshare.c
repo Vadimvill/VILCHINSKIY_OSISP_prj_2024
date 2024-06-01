@@ -249,34 +249,30 @@ char *recieveMessage(int fd) {
 }
 
 
-void send_file(const char *path, int fd,int command_fd) {
+void send_file(const char *path, int fd, int command_fd) {
     int file_fd = open(path, O_RDWR);
     long long byte_size = getFileSize(path);
     char str[50];
     sprintf(str, "%lld", byte_size);
-    size_t size = 1024*64;
+    size_t size = 1024 * 64;
     char *file_bytes = malloc(size);
     send(fd, str, 50, 0);
     int total = 0;
     int total_read = 0;
     int count_iter = 0;
-    while (1){
+    while (1) {
         char command_buff[8];
-        int n = read(file_fd,file_bytes,size);
-        total_read += n;
-        count_iter++;
-        printf("Read%d\n",n);
-        printf("Total_read%d\n",total_read);
-        printf("Count_iter%d\n",count_iter);
-        if(n == 0){
-            send(command_fd,NEGATIVE_ANSWER,8,0);
+        if(total >= byte_size) {
+            printf("last package\n");
+            send(command_fd,LAST_PACKAGE,8,0);
             recv(command_fd,command_buff,8,0);
             break;
         }
-        int b = send(fd,file_bytes,n,0);
-        total+=b;
-        printf("Send%d\n",b);
-        printf("Total send%d\n",total);
+        int read_size = read(file_fd,file_bytes,size);
+        int send_size = send(fd,file_bytes,read_size,0);
+        total+=send_size;
+        printf("send: %d\n",send_size);
+        printf("Total send: %d\n",total);
         send(command_fd,POSTIVE_ANSWER,8,0);
         recv(command_fd,command_buff,8,0);
     }
@@ -284,48 +280,48 @@ void send_file(const char *path, int fd,int command_fd) {
     close(file_fd);
 }
 
-void recv_file(const char *path, int fd,int command_fd) {
+void recv_file(const char *path, int fd, int command_fd) {
     char str[50];
     long long byte_size;
     char *endptr;
     recv(fd, str, 50, 0);
     byte_size = strtoll(str, &endptr, 10);
-    int size = 1024*64;
+    int size = 1024 * 64;
     char *file_bytes = malloc(size);
-    int file_fd = open(path, O_RDWR | O_CREAT,0644);
+    int file_fd = open(path, O_RDWR | O_CREAT, 0644);
     int total = 0;
     int total_write = 0;
     int count_iter = 0;
     while (1) {
         char command_buf[8];
         recv(command_fd,command_buf,8,0);
-        if(compare_commands(command_buf,POSTIVE_ANSWER)){
-            int n = recv(fd,file_bytes,size,0);
-            total+=n;
-            printf("Recv%d\n",n);
-            printf("Total recv%d\n",total);
-            count_iter++;
-            printf("Count_iter%d\n",count_iter);
-            int b = write(file_fd,file_bytes,n);
-            total_write+=b;
-            printf("Write%d\n",b);
-            printf("Total_Write%d\n",total_write);
+        if(compare_commands(command_buf,POSTIVE_ANSWER)) {
+            int recv_size = recv(fd,file_bytes,size,0);
+            int write_size = write(file_fd,file_bytes,recv_size);
+            total+=recv_size;
+            printf("recv: %d\n",recv_size);
+            printf("Total recv: %d\n",total);
             send(command_fd,POSTIVE_ANSWER,8,0);
-        } else{
-            int n = recv(fd,file_bytes,size,0);
-            total+=n;
-            printf("Recv%d\n",n);
-            printf("Total recv%d\n",total);
-            count_iter++;
-            printf("Count_iter%d\n",count_iter);
-            int b = write(file_fd,file_bytes,n);
-            total_write+=b;
-            printf("Write%d\n",b);
-            printf("Total_Write%d\n",total_write);
         }
-    }
-    free(file_bytes);
-    close(file_fd);
+        else if(compare_commands(command_buf,LAST_PACKAGE)){
+            printf("total %d byte_size %lld\n",total,byte_size);
+            if(total >= byte_size){
+                send(command_fd,POSTIVE_ANSWER,8,0);
+                break;
+            }
+            printf("last package\n");
+            int recv_size = recv(fd,file_bytes,size,0);
+            int write_size = write(file_fd,file_bytes,recv_size);
+            total+=recv_size;
+            printf("recv: %d\n",recv_size);
+            printf("Total recv: %d\n",total);
+            send(command_fd,POSTIVE_ANSWER,8,0);
+            break;
+        }
+}
+
+free(file_bytes);
+close(file_fd);
 }
 
 long long getFileSize(const char *path) {
