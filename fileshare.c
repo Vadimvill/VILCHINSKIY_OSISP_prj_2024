@@ -16,32 +16,9 @@
 #include "fileshare.h"
 #include "fwrapper.h"
 
-#define BUFFER_SIZE 4096
 pthread_mutex_t client_mut;
 pthread_mutex_t server_mut;
-int set_blocking_mode(int fd, int blocking) {
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags == -1) {
-        perror("fcntl F_GETFL");
-        return -1;
-    }
 
-    if (blocking) {
-        flags &= ~O_NONBLOCK;
-    } else {
-        flags |= O_NONBLOCK;
-    }
-
-    if (fcntl(fd, F_SETFL, flags) == -1) {
-        perror("fcntl F_SETFL");
-        return -1;
-    }
-
-    return 0;
-}
-
-
-extern int usleep(__useconds_t __useconds);
 
 unsigned char compare_commands(const char com1[8], const char com2[8]) {
     for (int i = 0; i < 8; i++) {
@@ -234,23 +211,6 @@ void send_list_of_files(int fd, char *path) {
     free(n);
 }
 
-void sendMessage(char *message, int fd) {
-    char buffer[BUFFER_SIZE];
-    send(fd, message, strlen(message), 0);
-    recv(fd, buffer, BUFFER_SIZE, 0);
-}
-
-char *recieveMessage(int fd) {
-    rewind(stdin);
-    char buffer[BUFFER_SIZE];
-    char *answer = "message sent";
-    ssize_t n = recv(fd, buffer, BUFFER_SIZE, 0);
-    send(fd, answer, strlen(answer), 0);
-    char *message = (char *) malloc((n + 1) * sizeof(char));
-    strcpy(message, buffer);
-    message[n] = '\0';
-    return message;
-}
 
 
 void send_file(const char *path, int fd, int command_fd) {
@@ -306,7 +266,8 @@ void recv_file(const char *path, int fd, int command_fd) {
             int recv_size = recv(fd,file_bytes,size,0);
             int write_size = write(file_fd,file_bytes,recv_size);
             total+=recv_size;
-            printf("%d/%lld  %d\n",total,byte_size,(int)((double)total/(double)byte_size));
+            double procent = (double)total/(double)byte_size;
+            printf("%d/%lld  %d%%\n",total,byte_size,(int)(procent*100));
             send(command_fd,POSTIVE_ANSWER,8,0);
         }
         else if(compare_commands(command_buf,LAST_PACKAGE)){
@@ -336,22 +297,4 @@ long long getFileSize(const char *path) {
         perror("Failed to get file information");
         return -1;
     }
-}
-
-char *getFileSizeString(long long fileSize) {
-    char *fileSizeString = (char *) malloc(20 * sizeof(char));
-    sprintf(fileSizeString, "%lld", fileSize);
-    return fileSizeString;
-}
-
-long long getFileSizeFromString(const char *fileSizeString) {
-    char *endPtr;
-    long long fileSize = strtoll(fileSizeString, &endPtr, 20);
-
-    if (fileSize == 0 && endPtr == fileSizeString) {
-        fprintf(stderr, "Invalid file size string: %s\n", fileSizeString);
-        return -1;
-    }
-
-    return fileSize;
 }

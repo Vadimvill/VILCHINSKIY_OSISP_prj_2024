@@ -56,7 +56,7 @@ void menu_close_client(int *fd) {
     printf("closet client\n");
 }
 
-void menu_recv_files(int *fd) {
+void menu_recv_files(int *fd,char ip[16]) {
     char command_buff[COMMAND_SIZE];
     char msg_buff[MSG_SIZE];
 
@@ -84,6 +84,9 @@ void menu_recv_files(int *fd) {
                 for(int k = 0;k<4;k++){
                     pthread_join(array[k],NULL);
                 }
+                menu_close_client(fd);
+                sleep(3);
+                fd = init_client(ip);
                 count_use_threads = 0;
                 command_fd_index=4;
             }
@@ -126,6 +129,8 @@ void menu_send_file(int *fd, char *base_path) {
                 for(int c = 0;c<4;c++){
                     pthread_join(array[c],NULL);
                 }
+                menu_close_server(fd,fd[8]);
+                fd = init_server(0);
                 count_use_threads = 0;
                 command_fd_index = 4;
             }
@@ -189,7 +194,7 @@ int client(char* base_path_server,int ppid) {
         char buff[8];
         write(fd[0], choise, 1);
         if ((*choise) == '1'){
-            menu_recv_files(fd);
+            menu_recv_files(fd,ip);
             menu_close_client(fd);
             sleep(3);
             fd = init_client(ip);
