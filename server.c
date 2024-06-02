@@ -40,17 +40,17 @@ void *thread_function_recv(void *arg) {
 
 void menu_close_server(int *fd, int server) {
     sleep(1);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 8; i++) {
         close(fd[i]);
     }
-    close(server);
+    close(fd[8]);
     printf("closet\n");
     sleep(1);
 
 }
 
 void menu_close_client(int *fd) {
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 8; i++) {
         close(fd[i]);
     }
     printf("closet client\n");
@@ -77,6 +77,7 @@ void menu_recv_files(int *fd) {
 
     if (compare_commands(command_buff, POSTIVE_ANSWER)) {
         int count_use_threads = 0;
+        int command_fd_index = 4;
         pthread_t *array = malloc(sizeof(pthread_t)*4);
         for (int i = 0; i < (*n); i++) {
             if(count_use_threads == 4){
@@ -84,20 +85,19 @@ void menu_recv_files(int *fd) {
                     pthread_join(array[k],NULL);
                 }
                 count_use_threads = 0;
+                command_fd_index=4;
             }
             struct ThreadArgs threadArgs;
             threadArgs.name = names[i];
-            threadArgs.fd = fd[1];
-            threadArgs.command_fd = fd[0];
+            threadArgs.fd = fd[count_use_threads];
+            threadArgs.command_fd = fd[command_fd_index];
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_recv,&threadArgs);
             count_use_threads++;
+            command_fd_index++;
             sleep(0);
         }
         for(int z = 0;z<count_use_threads;z++){
             pthread_join(array[z],NULL);
-        }
-        for(int c = 0;c<count_use_threads;c++){
-            pthread_join(array[c],NULL);
         }
         free(array);
     }
@@ -119,6 +119,7 @@ void menu_send_file(int *fd, char *base_path) {
     if (check_files(msg_buff, "./")) {
         write(fd[0], POSTIVE_ANSWER, COMMAND_SIZE);
         int count_use_threads = 0;
+        int command_fd_index = 4;
         pthread_t *array = malloc(sizeof(pthread_t)*4);
         for (int i = 0; i < (*n); i++) {
             if(count_use_threads == 4){
@@ -126,13 +127,15 @@ void menu_send_file(int *fd, char *base_path) {
                     pthread_join(array[c],NULL);
                 }
                 count_use_threads = 0;
+                command_fd_index = 4;
             }
             struct ThreadArgs threadArgs;
             threadArgs.name = names[i];
-            threadArgs.fd = fd[count_use_threads+1];
-            threadArgs.command_fd = fd[0];
+            threadArgs.fd = fd[count_use_threads];
+            threadArgs.command_fd = fd[command_fd_index];
             int result = pthread_create(&array[count_use_threads],NULL, thread_function_send,&threadArgs);
             count_use_threads++;
+            command_fd_index++;
             sleep(0);
         }
         for(int c = 0;c<count_use_threads;c++){
@@ -147,7 +150,7 @@ void menu_send_file(int *fd, char *base_path) {
     } else write(fd[0], NEGATIVE_ANSWER, COMMAND_SIZE);
 }
 void clean_up_server(int sig) {
-    menu_close_server(copy_fd, copy_fd[5]);
+    menu_close_server(copy_fd, copy_fd[8]);
     free(copy_fd);
     exit(0);
 }
@@ -248,19 +251,19 @@ int server() {
         char buff[8];
         if ((*choise) == '1'){
             menu_send_file(fd,base_path);
-            menu_close_server(fd,fd[5]);
+            menu_close_server(fd,fd[8]);
             fd = init_server(0);
             copy_fd = fd;
         }
         if((*choise) == '2'){
             send_list_of_files(fd[0],"./");
-            menu_close_server(fd,fd[5]);
+            menu_close_server(fd,fd[8]);
             fd = init_server(0);
             copy_fd = fd;
         }
         if ((*choise) == '3'){
             free(choise);
-            menu_close_server(fd, fd[5]);
+            menu_close_server(fd, fd[8]);
             free(fd);
             kill(pid,SIGTERM);
             exit(1);

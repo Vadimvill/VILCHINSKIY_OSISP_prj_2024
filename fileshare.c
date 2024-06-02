@@ -12,11 +12,13 @@
 #include <openssl/md5.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
+#include <pthread.h>
 #include "fileshare.h"
 #include "fwrapper.h"
 
 #define BUFFER_SIZE 4096
-
+pthread_mutex_t client_mut;
+pthread_mutex_t server_mut;
 int set_blocking_mode(int fd, int blocking) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) {
@@ -149,8 +151,8 @@ int *init_client(char ip[16]) {
     int success = 0;
     int *fd;
     do {
-        fd = malloc(sizeof(int) * 5);
-        for (int i = 0; i < 5; i++) {
+        fd = malloc(sizeof(int) * 8);
+        for (int i = 0; i < 8; i++) {
             fd[i] = socket(AF_INET, SOCK_STREAM, 0);
             struct sockaddr_in adr = {0};
             adr.sin_family = AF_INET;
@@ -173,6 +175,7 @@ int *init_client(char ip[16]) {
         }
 
     } while (!success);
+    pthread_mutex_init(&client_mut,NULL);
     return fd;
 }
 
@@ -183,14 +186,15 @@ int *init_server(int print) {
     adr.sin_family = AF_INET;
     adr.sin_port = htons(10000);
     Bind(server_socket, &adr, sizeof(adr));
-    Listen(server_socket, 5);
+    Listen(server_socket, 8);
     socklen_t addrlen = sizeof(adr);
     if (print) print_local_ip(10000);
-    int *fd = malloc(sizeof(int) * 6);
-    fd[5] = server_socket;
-    for (int i = 0; i < 5; i++) {
+    int *fd = malloc(sizeof(int) * 9);
+    fd[8] = server_socket;
+    for (int i = 0; i < 8; i++) {
         fd[i] = Accept(server_socket, &adr, addrlen);
     }
+    pthread_mutex_init(&server_mut,NULL);
     return fd;
 }
 
@@ -250,6 +254,7 @@ char *recieveMessage(int fd) {
 
 
 void send_file(const char *path, int fd, int command_fd) {
+    pthread_mutex_lock(&server_mut);
     int file_fd = open(path, O_RDWR);
     long long byte_size = getFileSize(path);
     char str[50];
@@ -261,9 +266,10 @@ void send_file(const char *path, int fd, int command_fd) {
     int total_read = 0;
     int count_iter = 0;
     while (1) {
+     //   system("clear");
+
         char command_buff[8];
         if(total >= byte_size) {
-            printf("last package\n");
             send(command_fd,LAST_PACKAGE,8,0);
             recv(command_fd,command_buff,8,0);
             break;
@@ -271,16 +277,16 @@ void send_file(const char *path, int fd, int command_fd) {
         int read_size = read(file_fd,file_bytes,size);
         int send_size = send(fd,file_bytes,read_size,0);
         total+=send_size;
-        printf("send: %d\n",send_size);
-        printf("Total send: %d\n",total);
         send(command_fd,POSTIVE_ANSWER,8,0);
         recv(command_fd,command_buff,8,0);
     }
     free(file_bytes);
     close(file_fd);
+    pthread_mutex_unlock(&server_mut);
 }
 
 void recv_file(const char *path, int fd, int command_fd) {
+    pthread_mutex_lock(&client_mut);
     char str[50];
     long long byte_size;
     char *endptr;
@@ -293,28 +299,24 @@ void recv_file(const char *path, int fd, int command_fd) {
     int total_write = 0;
     int count_iter = 0;
     while (1) {
+       // system("clear");
         char command_buf[8];
         recv(command_fd,command_buf,8,0);
         if(compare_commands(command_buf,POSTIVE_ANSWER)) {
             int recv_size = recv(fd,file_bytes,size,0);
             int write_size = write(file_fd,file_bytes,recv_size);
             total+=recv_size;
-            printf("recv: %d\n",recv_size);
-            printf("Total recv: %d\n",total);
+            printf("%d/%lld  %d\n",total,byte_size,(int)((double)total/(double)byte_size));
             send(command_fd,POSTIVE_ANSWER,8,0);
         }
         else if(compare_commands(command_buf,LAST_PACKAGE)){
-            printf("total %d byte_size %lld\n",total,byte_size);
             if(total >= byte_size){
                 send(command_fd,POSTIVE_ANSWER,8,0);
                 break;
             }
-            printf("last package\n");
             int recv_size = recv(fd,file_bytes,size,0);
             int write_size = write(file_fd,file_bytes,recv_size);
             total+=recv_size;
-            printf("recv: %d\n",recv_size);
-            printf("Total recv: %d\n",total);
             send(command_fd,POSTIVE_ANSWER,8,0);
             break;
         }
@@ -322,6 +324,7 @@ void recv_file(const char *path, int fd, int command_fd) {
 
 free(file_bytes);
 close(file_fd);
+    pthread_mutex_unlock(&client_mut);
 }
 
 long long getFileSize(const char *path) {
